@@ -1,0 +1,6 @@
+{"id": "n1", "question": "查看前5条销售记录的销售地区和金额。", "expect_columns": ["region", "amount"], "expect_sql_contains": ["SELECT", "FROM sales"], "gold_sql": "SELECT region, amount FROM sales LIMIT 5;"}
+{"id": "n2", "question": "列出前5条订单的日期和地区。", "expect_columns": ["date", "region"], "expect_sql_contains": ["SELECT", "FROM sales"], "gold_sql": "SELECT date, region FROM sales LIMIT 5;"}
+{"id": "n3", "question": "找出前5条记录的品类和销售数量。", "expect_columns": ["category", "quantity"], "expect_sql_contains": ["SELECT", "FROM sales"], "gold_sql": "SELECT category, quantity FROM sales LIMIT 5;"}
+{"id": "n4", "question": "展示前5条销售数据的销售人员和金额。", "expect_columns": ["salesperson", "amount"], "expect_sql_contains": ["SELECT", "FROM sales"], "gold_sql": "SELECT salesperson, amount FROM sales LIMIT 5;"}
+{"id": "n5", "question": "查询前5条记录的成交日期与销售数量。", "expect_columns": ["date", "quantity"], "expect_sql_contains": ["SELECT", "FROM sales"], "gold_sql": "SELECT date, quantity FROM sales LIMIT 5;"}
+{"id": "n6", "question": "抽查前5条记录，列出销售员和所属品类。", "expect_columns": ["salesperson", "category"], "expect_sql_contains": ["SELECT", "FROM sales"], "gold_sql": "SELECT salesperson, category FROM sales LIMIT 5;"}
