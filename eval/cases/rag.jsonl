@@ -1,0 +1,8 @@
+{"id": "r1", "question": "退货期限是多久？", "expect_source_contains": "退货政策", "expect_answer_keywords": ["7 天", "退货"]}
+{"id": "r2", "question": "数码产品保修期多长？", "expect_source_contains": "产品FAQ", "expect_answer_keywords": ["12 个月", "保修"]}
+{"id": "r3", "question": "销售折扣需要谁审批？", "expect_source_contains": "销售流程", "expect_answer_keywords": ["折扣", "审批"]}
+{"id": "r4", "question": "退款多长时间到账？", "expect_source_contains": "退货政策", "expect_answer_keywords": ["3 个工作日", "退款"]}
+{"id": "r5", "question": "满多少元包邮？", "expect_source_contains": "产品FAQ", "expect_answer_keywords": ["199", "包邮"]}
+{"id": "r6", "question": "销售提成比例怎么算的？", "expect_source_contains": "销售流程", "expect_answer_keywords": ["提成", "3%", "5%", "7%"]}
+{"id": "r7", "question": "不予退货的情形有哪些？", "expect_source_contains": "退货政策", "expect_answer_keywords": ["不予", "卫生", "数码", "特价"]}
+{"id": "r8", "question": "换货流程是怎样的？", "expect_source_contains": "退货政策", "expect_answer_keywords": ["换货", "签收"]}
