@@ -1,4 +1,4 @@
-"""AI Harness —— 评测运行器（M2 最小版：仅 NL2SQL 套件）。
+"""AI Harness —— 评测运行器（NL2SQL + RAG 双套件）。
 
 用法：
     python -m eval.harness run --suite nl2sql
@@ -8,7 +8,8 @@
 与 gold_sql 的执行结果比较列匹配与行集一致，输出每条 PASS/FAIL 与聚合指标，
 并落盘一份 JSON 报告（eval/reports/report-<ts>.json）。全程不触网。
 
-RAG 套件在 M3 落地后自动接入（套件注册表 SUITES 里加一行即可）。
+RAG 套件：pass 判据为 top-k 检索命中期望来源；回答关键词召回率单独作为
+生成质量指标输出（mock 回答是 prompt 前缀截断，不保证完整生成，故不计入 pass）。
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from typing import Any
 import pandas as pd
 
 from app.analysis.nl2sql import ask_nl2sql, run_sql
+from app.kb.rag import RAG
 from app.llm.client import LLMClient
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -168,12 +170,84 @@ def run_nl2sql_suite(client: LLMClient, df: pd.DataFrame, cases: list[dict[str, 
     }
 
 
+# ------------------------------------------------------------------ RAG 套件
+
+
+def run_rag_suite(client: LLMClient, df: pd.DataFrame, cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """逐条跑 RAG 用例：知识库 build 一次，再对每条问题做 top-k 检索与问答。
+
+    指标：
+    - retrieval_hit_rate：top-k 检索结果包含 expect_source_contains 的用例占比（pass 判据）
+    - answer_keyword_recall：回答命中期望关键词的平均召回率（生成质量指标）
+    """
+    from app.kb.rag import ROOT as KB_ROOT  # 复用 rag 模块的路径常量
+
+    rag = RAG(client)
+    documents = sorted(str(p) for p in (KB_ROOT / "data" / "kb").glob("*.md"))
+    rag.build(documents)
+
+    per_case: list[dict[str, Any]] = []
+    hits = 0
+    recall_sum = 0.0
+
+    for case in cases:
+        question = case["question"]
+        expect_src = case["expect_source_contains"]
+        keywords = case.get("expect_answer_keywords", [])
+
+        retrieved = rag.retrieve(question, k=4)
+        top_sources = [c.source for _, c in retrieved]
+        hit = any(expect_src in s for s in top_sources)
+
+        result = rag.answer(question, k=4)
+        answer = result["answer"]
+        recall = (
+            sum(1 for kw in keywords if kw.lower() in answer.lower()) / len(keywords)
+            if keywords
+            else 1.0
+        )
+
+        hits += 1 if hit else 0
+        recall_sum += recall
+
+        per_case.append(
+            {
+                "id": case.get("id", "?"),
+                "question": question,
+                "pass": bool(hit),
+                "retrieval_hit": bool(hit),
+                "expect_source_contains": expect_src,
+                "top_sources": top_sources,
+                "answer_keywords": keywords,
+                "keyword_recall": recall,
+                "answer_preview": answer[:120],
+            }
+        )
+
+    n = len(cases)
+    return {
+        "suite": "rag",
+        "n_cases": n,
+        "per_case": per_case,
+        "metrics": {
+            "retrieval_hit_rate": hits / n,
+            "answer_keyword_recall": recall_sum / n,
+        },
+        "summary": {
+            "total": n,
+            "passed": sum(1 for c in per_case if c["pass"]),
+            "failed": sum(1 for c in per_case if not c["pass"]),
+        },
+    }
+
+
 # ------------------------------------------------------------------ 套件注册表
 
 
-#: 套件名 -> 运行函数。M3 的 rag.jsonl 与 RAG 套件就绪后在此追加一行即可
+#: 套件名 -> 运行函数
 SUITE_RUNNERS: dict[str, Any] = {
     "nl2sql": run_nl2sql_suite,
+    "rag": run_rag_suite,
 }
 
 
@@ -203,6 +277,8 @@ def _format_pct(value: float) -> str:
 
 def print_markdown(suite_report: dict[str, Any], mode: str) -> None:
     """在控制台打印 markdown 格式的评测摘要。"""
+    if suite_report["suite"] == "rag":
+        return _print_markdown_rag(suite_report, mode)
     metrics = suite_report["metrics"]
     summary = suite_report["summary"]
     print(f"### NL2SQL 评测摘要（{mode} 模式，共 {summary['total']} 条用例）")
@@ -219,6 +295,29 @@ def print_markdown(suite_report: dict[str, Any], mode: str) -> None:
         print(
             f"| {case['id']} | {case['question']} | {status} "
             f"| {case['column_match']:.2f} | {case['row_agreement']:.2f} | {sql} |"
+        )
+
+
+def _print_markdown_rag(suite_report: dict[str, Any], mode: str) -> None:
+    """RAG 套件的 markdown 摘要。"""
+    metrics = suite_report["metrics"]
+    summary = suite_report["summary"]
+    print(f"### RAG 评测摘要（{mode} 模式，共 {summary['total']} 条用例）")
+    print(f"- PASS {summary['passed']} / FAIL {summary['failed']}")
+    print(f"- top-k 检索命中率：{_format_pct(metrics['retrieval_hit_rate'])}")
+    print(f"- 回答关键词召回率：{_format_pct(metrics['answer_keyword_recall'])}")
+    print()
+    print("| 用例 | 问题 | 状态 | 命中来源 | 关键词召回 | 回答预览 |")
+    print("|------|------|------|----------|------------|----------|")
+    for case in suite_report["per_case"]:
+        status = "PASS" if case["pass"] else "FAIL"
+        hit_src = next(
+            (s for s in case["top_sources"] if case["expect_source_contains"] in s), "-"
+        )
+        preview = (case["answer_preview"] or "").replace("|", "\\|").replace("\n", " ")[:40]
+        print(
+            f"| {case['id']} | {case['question']} | {status} "
+            f"| {hit_src.split('/')[-1].split(chr(92))[-1]} | {case['keyword_recall']:.2f} | {preview} |"
         )
 
 
