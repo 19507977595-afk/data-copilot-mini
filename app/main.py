@@ -299,9 +299,10 @@ def page_lowcode() -> None:
 
     with left:
         picked = st.selectbox("配置文件", options=names or ["（无）"])
-        if names and st.button("新建配置（模板）"):
-            st.session_state["_cfg_picked"] = None  # 强制下一轮写回模板
+        if st.button("新建配置（模板）"):
             st.session_state["cfg_yaml"] = TEMPLATE_YAML
+            # 标记"已同步"，避免下面的回填逻辑把刚载入的模板覆盖掉
+            st.session_state["_cfg_picked"] = picked
         # 切换配置文件时把磁盘内容读进编辑器
         if names and st.session_state.get("_cfg_picked") != picked:
             st.session_state["cfg_yaml"] = (CONFIG_DIR / picked).read_text(encoding="utf-8")
