@@ -1,0 +1,22 @@
+# 低代码看板示例配置：改这份 YAML = 改页面，无需动 Python 代码
+name: 销售驾驶舱
+data: data/sales.csv
+transforms:            # 按序执行，每步输出新命名数据集
+  - id: monthly
+    op: aggregate
+    group_by: [month]  # month 由 date 派生（strftime %Y-%m）
+    metrics: {total_amount: {col: amount, fn: sum}, avg_amount: {col: amount, fn: mean}}
+charts:
+  - type: line         # line|bar|pie
+    data: monthly
+    x: month
+    y: total_amount
+    title: 月度销售额
+  - type: bar
+    data: raw
+    group_by: region
+    metric: {col: amount, fn: sum}
+    title: 区域销售额
+filters:               # 全局筛选控件（低代码卖点：点选即可改配置）
+  - field: region
+    kind: multiselect

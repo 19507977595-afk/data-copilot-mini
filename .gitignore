@@ -1,0 +1,19 @@
+# 缓存 / 运行产物
+.cache/
+logs/
+eval/reports/
+__pycache__/
+*.py[cod]
+
+# 环境
+.venv/
+venv/
+.env
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+
+# Streamlit
+.streamlit/secrets.toml
