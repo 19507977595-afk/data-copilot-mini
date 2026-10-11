@@ -158,19 +158,43 @@ class LLMClient:
         return resp.output.choices[0].message.content
 
     def _dashscope_embed(self, texts: list[str], model: str) -> list[list[float]]:
-        """调用 dashscope.TextEmbedding.call，按顺序返回向量。"""
+        """调用 dashscope.TextEmbedding.call，按顺序返回向量。
+
+        text-embedding-v3 单请求批量上限为 10 条，超出会被服务端 400 拒绝；
+        这里自动分批发送并拼回原顺序，单条失败重试 1 次。
+        """
         import dashscope  # 懒加载
 
-        resp = dashscope.TextEmbedding.call(
-            api_key=self.api_key,
-            model=model,
-            input=texts,
-        )
-        if resp.status_code != 200:
-            raise RuntimeError(f"DashScope embed 调用失败: {resp.status_code} {resp.message}")
-        # DashScope 返回的 embeddings 可能不保证顺序，按 text_index 排序
-        items = sorted(resp.output["embeddings"], key=lambda x: x.get("text_index", 0))
-        return [item["embedding"] for item in items]
+        batch_size = 10
+        vectors: list[list[float]] = [[] for _ in texts]
+
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            resp = None
+            for attempt in (1, 2):  # 失败重试 1 次
+                resp = dashscope.TextEmbedding.call(
+                    api_key=self.api_key,
+                    model=model,
+                    input=batch,
+                )
+                if resp.status_code == 200:
+                    break
+                if attempt == 1:
+                    import time
+
+                    time.sleep(1.0)
+            if resp.status_code != 200:
+                raise RuntimeError(
+                    f"DashScope embed 调用失败: {resp.status_code} {resp.message}"
+                )
+            # DashScope 返回的 embeddings 可能不保证顺序，按 text_index（批内相对序号）排序
+            items = sorted(resp.output["embeddings"], key=lambda x: x.get("text_index", 0))
+            for offset, item in enumerate(items):
+                vectors[start + offset] = item["embedding"]
+
+        if any(not v for v in vectors):
+            raise RuntimeError("DashScope embed 返回向量数量与输入不一致")
+        return vectors
 
     # ------------------------------------------------------------------ mock 实现
 
