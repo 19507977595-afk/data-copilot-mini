@@ -82,12 +82,27 @@ def _is_truthy(value: str | None) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _streamlit_secret(name: str) -> str | None:
+    """Streamlit Cloud 的 secrets 兑底：本地无 st 环境或未配置时返回 None。"""
+    try:
+        import streamlit as st  # 懒加载，非云端环境不依赖
+
+        return st.secrets.get(name) or None
+    except Exception:
+        return None
+
+
 class LLMClient:
     """DashScope 大模型客户端；无 Key 时退化为可复现的 mock 实现。"""
 
     def __init__(self, api_key: str | None = None) -> None:
-        # 显式传入的 key 优先，其次读环境变量 DASHSCOPE_API_KEY
-        self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY") or None
+        # 显式传入的 key 优先，其次环境变量 DASHSCOPE_API_KEY，最后 Streamlit secrets（云端部署）
+        self.api_key = (
+            api_key
+            or os.getenv("DASHSCOPE_API_KEY")
+            or _streamlit_secret("DASHSCOPE_API_KEY")
+            or None
+        )
         # USE_MOCK=1 强制 mock；没有 key 也自动 mock
         self._mock = _is_truthy(os.getenv("USE_MOCK")) or not self.api_key
 
